@@ -1,12 +1,11 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Datenbank (Namen müssen nur im Objektnamen VORKOMMEN)
+-- DATENBANK
 local CarDatabase = {
     ["BNV K3 F"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["Skami Truk"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["BNV K8"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["Merquis SLX"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
-    ["Chule Curgete"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["Four Traffic"] = {Rarity = "Selten", Color = Color3.fromRGB(0, 0, 255)},
     ["Lokswag Passar"] = {Rarity = "Ungewöhnlich", Color = Color3.fromRGB(0, 255, 0)},
 }
@@ -16,8 +15,8 @@ local AutoBuyActive = false
 local TrackedObjects = {}
 
 local Window = Rayfield:CreateWindow({
-   Name = "Fix It Up! Junkyard Scanner",
-   LoadingTitle = "Suche im Schrottplatz...",
+   Name = "Fix It Up! Spawn-Scanner",
+   LoadingTitle = "Optimiere Koordinaten-Scan...",
 })
 
 local RadarTab = Window:CreateTab("Live-Radar", 4483362458)
@@ -29,60 +28,48 @@ AutoBuyTab:CreateToggle({
    Callback = function(Value) AutoBuyActive = Value end,
 })
 
--- Auswahl-Liste
-for carName, data in pairs(CarDatabase) do
+for carName, _ in pairs(CarDatabase) do
     AutoBuyTab:CreateToggle({
-       Name = carName .. " (" .. data.Rarity .. ")",
+       Name = carName,
        CurrentValue = false,
        Callback = function(Value) SelectedForAutoBuy[carName] = Value end,
     })
 end
 
--- EFFIZIENTE SCAN-LOGIK
+-- NEUE LOGIK: Wir scannen nur Modelle in der Nähe der Spawnpoints
 task.spawn(function()
-    while task.wait(1) do -- 1 Sekunde Intervall ist der "Sweet Spot" gegen Lag
-        -- Wir scannen ALLES, aber filtern sofort nach Modellen
-        for _, obj in pairs(workspace:GetDescendants()) do 
-            
-            -- Prüfen, ob es ein Modell ist
-            if obj:IsA("Model") then
-                local foundData = nil
+    while task.wait(1) do
+        -- Wir schauen in den Ordner, wo die Autos gespawnt werden. 
+        -- Falls die Autos im Junkyard in einem speziellen Ordner liegen,
+        -- ersetze 'workspace' durch 'workspace.Junkyard' oder ähnliches.
+        local potentialCars = workspace:GetPartBoundsInBox(CFrame.new(0,0,0), Vector3.new(5000, 5000, 5000)) -- Großer Bereich um den Junkyard
+
+        for _, part in pairs(potentialCars) do
+            local obj = part.Parent
+            if obj and obj:IsA("Model") and CarDatabase[obj.Name] then
                 
-                -- Prüfen, ob der Name eines Autos aus unserer Liste im Modellnamen enthalten ist
-                for dbName, data in pairs(CarDatabase) do
-                    if string.find(obj.Name, dbName) then
-                        foundData = data
-                        break
-                    end
+                -- 1. Highlight
+                if not obj:FindFirstChild("EliteHighlight") then
+                    local hl = Instance.new("Highlight", obj)
+                    hl.Name = "EliteHighlight"
+                    hl.OutlineColor = CarDatabase[obj.Name].Color
                 end
 
-                if foundData then
-                    -- 1. Highlighting
-                    if not obj:FindFirstChild("EliteHighlight") then
-                        local hl = Instance.new("Highlight", obj)
-                        hl.Name = "EliteHighlight"
-                        hl.OutlineColor = foundData.Color
-                        hl.FillTransparency = 0.7
-                    end
+                -- 2. Radar Update (Manuell)
+                if not TrackedObjects[obj] then
+                    RadarTab:CreateButton({
+                       Name = "ZU: " .. obj.Name,
+                       Callback = function() 
+                           game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
+                       end,
+                    })
+                    TrackedObjects[obj] = true
+                end
 
-                    -- 2. Radar Button (Manuell)
-                    if not TrackedObjects[obj] then
-                        RadarTab:CreateButton({
-                           Name = "ZU: " .. obj.Name,
-                           Callback = function() 
-                               game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
-                           end,
-                        })
-                        TrackedObjects[obj] = true
-                    end
-
-                    -- 3. Auto-Buy Teleport (Nur falls ausgewählt)
-                    for dbName, selected in pairs(SelectedForAutoBuy) do
-                        if selected and string.find(obj.Name, dbName) and AutoBuyActive then
-                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
-                            task.wait(2)
-                        end
-                    end
+                -- 3. Auto-Buy
+                if AutoBuyActive and SelectedForAutoBuy[obj.Name] then
+                    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
+                    task.wait(1.5)
                 end
             end
         end
