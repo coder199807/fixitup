@@ -4,21 +4,28 @@ end)
 
 if not success or not Rayfield then return end
 
--- DATENBANK DER NAMEN (Zum Abgleichen der IDs)
-local CarNames = {
-    "BNV K3 F", "Skami Truk", "BNV K8", "Merquis SLX", "Chule Curgete", 
-    "Fia-Te 10026p", "Auidy RF3 Limousine", "Audi V8", "BNV K5 e60", 
-    "Audi RF3", "Chule Camarao", "Four Rex", "BNV K5 e39", "Peujo 400e6",
-    "Vovo Sr60", "Lokswag Passar", "Sacode Oitava"
+-- DEINE DATENBANK (image_a819be.png)
+local CarDatabase = {
+    ["BNV K3 F"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Skami Truk"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["BNV K8"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Merquis SLX"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Auidy RF3 Limousine"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Audi V8"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["BNV K5 e60"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Audi RF3"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Chule Camarao"] = {Rarity = "Selten", Color = Color3.fromRGB(0, 0, 255)},
+    ["Four Rex"] = {Rarity = "Selten", Color = Color3.fromRGB(0, 0, 255)},
+    ["Peujo 400e6"] = {Rarity = "Selten", Color = Color3.fromRGB(0, 0, 255)},
 }
 
 local SelectedForAutoBuy = {}
 local AutoBuyActive = false
-local TrackedObjects = {}
+local IdentifiedCars = {} -- Hier speichern wir die entzifferten IDs
 
 local Window = Rayfield:CreateWindow({
-   Name = "Fix It Up! ULTIMATE HYBRID",
-   LoadingTitle = "Lerne Fahrzeug-IDs...",
+   Name = "Fix It Up! ID-DECODER",
+   LoadingTitle = "Starte Dauer-Überwachung...",
 })
 
 local RadarTab = Window:CreateTab("Live-Radar", 4483362458)
@@ -30,29 +37,23 @@ AutoBuyTab:CreateToggle({
    Callback = function(Value) AutoBuyActive = Value end,
 })
 
--- Erstelle Toggles für alle Autos in der Liste
-for _, carName in pairs(CarNames) do
+for name, _ in pairs(CarDatabase) do
     AutoBuyTab:CreateToggle({
-       Name = carName,
+       Name = name,
        CurrentValue = false,
-       Callback = function(Value) SelectedForAutoBuy[carName] = Value end,
+       Callback = function(v) SelectedForAutoBuy[name] = v end,
     })
 end
 
--- FUNKTION: FINDET DEN ECHTEN NAMEN (Lernt aus dem Cache)
-local function GetCarIdentity(model)
-    local valuesFolder = model:FindFirstChild("Values")
-    if not valuesFolder then return nil end
-
-    -- Wir durchsuchen ALLES im Values-Ordner und im Cache-Unterordner
-    -- Das ist die Lösung für die GUID-Namen (232c9107...)
-    local allValues = valuesFolder:GetDescendants()
-    for _, val in pairs(allValues) do
-        if val:IsA("StringValue") then
-            local text = val.Value
-            for _, knownName in pairs(CarNames) do
-                if string.find(string.lower(text), string.lower(knownName)) then
-                    return knownName
+-- FUNKTION: Die ID "knacken"
+local function DecipherID(model)
+    -- Wir suchen tief in allen Values (inkl. Cache-Ordner)
+    for _, item in pairs(model:GetDescendants()) do
+        if item:IsA("StringValue") and item.Value ~= "" then
+            for carName, data in pairs(CarDatabase) do
+                -- Wir prüfen, ob der Inhalt der Value einen Namen aus unserer Liste enthält
+                if string.find(string.lower(item.Value), string.lower(carName)) then
+                    return carName
                 end
             end
         end
@@ -60,85 +61,62 @@ local function GetCarIdentity(model)
     return nil
 end
 
--- FUNKTION: ESP ERSTELLEN (Wie in deinem Beispiel-Script)
-local function createESP(car, displayName)
-    if car:FindFirstChild("Body") and not car.Body:FindFirstChild("CarESP") then
-        local bbg = Instance.new("BillboardGui", car.Body)
-        bbg.Name = "CarESP"
+-- ESP FUNKTION (Billboard über dem Auto)
+local function applyESP(model, name, color)
+    if not model:FindFirstChild("DecodedTag") then
+        local bbg = Instance.new("BillboardGui", model:FindFirstChild("Body") or model:FindFirstChild("DriveSeat") or model)
+        bbg.Name = "DecodedTag"
         bbg.AlwaysOnTop = true
-        bbg.Size = UDim2.new(0, 150, 0, 50)
-        bbg.StudsOffset = Vector3.new(0, 3, 0)
+        bbg.Size = UDim2.new(0, 200, 0, 50)
+        bbg.StudsOffset = Vector3.new(0, 4, 0)
         
         local label = Instance.new("TextLabel", bbg)
         label.Size = UDim2.new(1, 0, 1, 0)
         label.BackgroundTransparency = 1
-        label.Text = "★ " .. displayName .. " ★"
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.TextSize = 16
+        label.Text = "★ " .. name .. " ★"
+        label.TextColor3 = color
+        label.TextSize = 18
         label.Font = Enum.Font.GothamBold
-        
-        local highlight = Instance.new("Highlight", car)
-        highlight.FillTransparency = 0.6
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+
+        local hl = Instance.new("Highlight", model)
+        hl.FillColor = color
+        hl.FillTransparency = 0.5
     end
 end
 
--- HAUPTLOGIK: VERARBEITUNG
-local function ProcessVehicle(obj)
-    if not obj:IsA("Model") or TrackedObjects[obj] then return end
-    
-    -- Warte kurz, bis die 'Values' vom Server repliziert wurden
-    task.wait(0.8)
-    
-    local realName = GetCarIdentity(obj)
-    
-    -- Wenn wir den Namen gefunden haben, fügen wir ihn dem Radar hinzu
-    if realName then
-        TrackedObjects[obj] = true
-        
-        -- Radar Button
-        RadarTab:CreateButton({
-           Name = "GEFUNDEN: " .. realName,
-           Callback = function() 
-               if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                   game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0, 5, 0)
-               end
-           end,
-        })
-        
-        -- ESP erzeugen
-        createESP(obj, realName)
-        
-        -- Auto-Buy Teleport
-        if AutoBuyActive and SelectedForAutoBuy[realName] then
-            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0, 5, 0)
+-- DER DAUER-SCANNER (Optimiert auf Vehicles)
+task.spawn(function()
+    while true do
+        local vFolder = workspace:FindFirstChild("Vehicles")
+        if vFolder then
+            for _, car in pairs(vFolder:GetChildren()) do
+                if car:IsA("Model") and not IdentifiedCars[car] then
+                    -- Versuch die ID zu entziffern
+                    local realName = DecipherID(car)
+                    
+                    if realName then
+                        IdentifiedCars[car] = realName
+                        local data = CarDatabase[realName]
+                        
+                        -- Radar Button hinzufügen
+                        RadarTab:CreateButton({
+                           Name = "ENTZIFFERT: " .. realName,
+                           Callback = function() 
+                               game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = car:GetModelCFrame() + Vector3.new(0, 5, 0)
+                           end,
+                        })
+                        
+                        -- ESP anbringen
+                        applyESP(car, realName, data.Color)
+                        
+                        -- Auto-Buy Logik
+                        if AutoBuyActive and SelectedForAutoBuy[realName] then
+                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = car:GetModelCFrame() + Vector3.new(0, 5, 0)
+                        end
+                    end
+                end
+            end
         end
+        task.wait(1) -- Scannt jede Sekunde den Vehicles-Ordner (Lag-frei)
     end
-end
-
--- MONITOR: Überwache den Vehicles Ordner (Aus deinem Explorer-Pfad)
-local vehiclesFolder = workspace:FindFirstChild("Vehicles")
-
-if vehiclesFolder then
-    -- Logik für neue Autos (wenn der Junkyard-Timer abläuft oder jemand kauft)
-    vehiclesFolder.ChildAdded:Connect(function(child)
-        ProcessVehicle(child)
-    end)
-
-    -- Scan für Autos, die bereits da sind
-    for _, child in pairs(vehiclesFolder:GetChildren()) do
-        task.spawn(function() ProcessVehicle(child) end)
-    end
-else
-    Rayfield:Notify({
-       Title = "Fehler",
-       Content = "Ordner 'Workspace.Vehicles' nicht gefunden!",
-       Duration = 10,
-    })
-end
-
-Rayfield:Notify({
-   Title = "Scanner Bereit",
-   Content = "Warte auf Junkyard-Spawn...",
-   Duration = 5,
-})
+end)
