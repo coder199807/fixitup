@@ -1,51 +1,32 @@
--- Sicherheits-Check für die Library
-local success, Rayfield = pcall(function()
-    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-end)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-if not success or not Rayfield then
-    warn("Rayfield konnte nicht geladen werden! Überprüfe deine Internetverbindung oder den Link.")
-    return
-end
-
--- Datenbank (Beispiel-Auszug, bitte mit deiner Liste ergänzen)
+-- Datenbank (Hier alle Namen EXAKT wie im Spiel eintragen)
 local CarDatabase = {
     ["BNV K3 F"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["Skami Truk"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
-    -- ... hier die restlichen Autos einfügen
+    ["BNV K8"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    -- ... (füge hier die anderen ein)
 }
 
 local SelectedForAutoBuy = {}
 local AutoBuyActive = false
+local TrackedObjects = {}
 
 local Window = Rayfield:CreateWindow({
-   Name = "Fix It Up! Premium Hub",
-   LoadingTitle = "XENO Executor stabilisiert...",
-   ConfigurationSaving = { Enabled = false } -- Deaktiviert für schnellere Ladezeit
+   Name = "Fix It Up! Smooth Hub",
+   LoadingTitle = "Optimierung aktiv...",
 })
 
--- TAB 1: LIVE RADAR
 local RadarTab = Window:CreateTab("Live-Radar", 4483362458)
-local RadarSection = RadarTab:CreateSection("Gespawnte Autos")
-
--- TAB 2: AUTO-BUY
 local AutoBuyTab = Window:CreateTab("Auto-Buy", 4483362458)
+
 AutoBuyTab:CreateToggle({
-   Name = "MASTER AUTO-BUY AKTIVIEREN",
+   Name = "MASTER AUTO-BUY",
    CurrentValue = false,
    Callback = function(Value) AutoBuyActive = Value end,
 })
 
--- Hilfsfunktion für Teleport
-local function SafeTeleport(model)
-    local p = game.Players.LocalPlayer
-    if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-        local cf = model:GetModelCFrame()
-        p.Character.HumanoidRootPart.CFrame = cf + Vector3.new(0, 5, 0)
-    end
-end
-
--- Erstellung der Auswahl-Liste
+-- Auswahl-Liste
 for carName, _ in pairs(CarDatabase) do
     AutoBuyTab:CreateToggle({
        Name = carName,
@@ -54,23 +35,39 @@ for carName, _ in pairs(CarDatabase) do
     })
 end
 
--- ECHTZEIT LOGIK
+-- OPTIMIERTE SCAN-LOGIK
 task.spawn(function()
-    while task.wait(0.5) do
-        for _, obj in pairs(workspace:GetDescendants()) do
+    while task.wait(1.5) do -- Höheres Intervall reduziert Lag massiv
+        -- Wir suchen gezielt in 'workspace', aber weniger tief
+        for _, obj in pairs(workspace:GetChildren()) do 
+            -- Falls die Autos in einem Ordner wie 'Vehicles' sind, 
+            -- änder 'workspace' oben zu 'workspace.Vehicles'
+            
             if obj:IsA("Model") and CarDatabase[obj.Name] then
                 
-                -- Highlighting
-                if not obj:FindFirstChild("Highlight") then
+                -- Highlight nur einmal setzen
+                if not obj:FindFirstChild("EliteHighlight") then
                     local hl = Instance.new("Highlight", obj)
+                    hl.Name = "EliteHighlight"
                     hl.OutlineColor = CarDatabase[obj.Name].Color
-                    hl.FillTransparency = 0.8
+                    hl.FillTransparency = 0.7
                 end
 
-                -- Auto-Buy Check
+                -- Radar Button erstellen (nur falls noch nicht da)
+                if not TrackedObjects[obj] then
+                    RadarTab:CreateButton({
+                       Name = "ZU: " .. obj.Name,
+                       Callback = function() 
+                           game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
+                       end,
+                    })
+                    TrackedObjects[obj] = true
+                end
+
+                -- Auto-Buy Teleport
                 if AutoBuyActive and SelectedForAutoBuy[obj.Name] then
-                    SafeTeleport(obj)
-                    task.wait(1)
+                    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
+                    task.wait(3) -- Sicherheits-Pause
                 end
             end
         end
