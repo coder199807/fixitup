@@ -1,11 +1,14 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Datenbank (Hier alle Namen EXAKT wie im Spiel eintragen)
+-- Datenbank (Namen müssen nur im Objektnamen VORKOMMEN)
 local CarDatabase = {
     ["BNV K3 F"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["Skami Truk"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
     ["BNV K8"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
-    -- ... (füge hier die anderen ein)
+    ["Merquis SLX"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Chule Curgete"] = {Rarity = "Episch", Color = Color3.fromRGB(255, 0, 255)},
+    ["Four Traffic"] = {Rarity = "Selten", Color = Color3.fromRGB(0, 0, 255)},
+    ["Lokswag Passar"] = {Rarity = "Ungewöhnlich", Color = Color3.fromRGB(0, 255, 0)},
 }
 
 local SelectedForAutoBuy = {}
@@ -13,8 +16,8 @@ local AutoBuyActive = false
 local TrackedObjects = {}
 
 local Window = Rayfield:CreateWindow({
-   Name = "Fix It Up! Smooth Hub",
-   LoadingTitle = "Optimierung aktiv...",
+   Name = "Fix It Up! Junkyard Scanner",
+   LoadingTitle = "Suche im Schrottplatz...",
 })
 
 local RadarTab = Window:CreateTab("Live-Radar", 4483362458)
@@ -27,47 +30,59 @@ AutoBuyTab:CreateToggle({
 })
 
 -- Auswahl-Liste
-for carName, _ in pairs(CarDatabase) do
+for carName, data in pairs(CarDatabase) do
     AutoBuyTab:CreateToggle({
-       Name = carName,
+       Name = carName .. " (" .. data.Rarity .. ")",
        CurrentValue = false,
        Callback = function(Value) SelectedForAutoBuy[carName] = Value end,
     })
 end
 
--- OPTIMIERTE SCAN-LOGIK
+-- EFFIZIENTE SCAN-LOGIK
 task.spawn(function()
-    while task.wait(1.5) do -- Höheres Intervall reduziert Lag massiv
-        -- Wir suchen gezielt in 'workspace', aber weniger tief
-        for _, obj in pairs(workspace:GetChildren()) do 
-            -- Falls die Autos in einem Ordner wie 'Vehicles' sind, 
-            -- änder 'workspace' oben zu 'workspace.Vehicles'
+    while task.wait(1) do -- 1 Sekunde Intervall ist der "Sweet Spot" gegen Lag
+        -- Wir scannen ALLES, aber filtern sofort nach Modellen
+        for _, obj in pairs(workspace:GetDescendants()) do 
             
-            if obj:IsA("Model") and CarDatabase[obj.Name] then
+            -- Prüfen, ob es ein Modell ist
+            if obj:IsA("Model") then
+                local foundData = nil
                 
-                -- Highlight nur einmal setzen
-                if not obj:FindFirstChild("EliteHighlight") then
-                    local hl = Instance.new("Highlight", obj)
-                    hl.Name = "EliteHighlight"
-                    hl.OutlineColor = CarDatabase[obj.Name].Color
-                    hl.FillTransparency = 0.7
+                -- Prüfen, ob der Name eines Autos aus unserer Liste im Modellnamen enthalten ist
+                for dbName, data in pairs(CarDatabase) do
+                    if string.find(obj.Name, dbName) then
+                        foundData = data
+                        break
+                    end
                 end
 
-                -- Radar Button erstellen (nur falls noch nicht da)
-                if not TrackedObjects[obj] then
-                    RadarTab:CreateButton({
-                       Name = "ZU: " .. obj.Name,
-                       Callback = function() 
-                           game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
-                       end,
-                    })
-                    TrackedObjects[obj] = true
-                end
+                if foundData then
+                    -- 1. Highlighting
+                    if not obj:FindFirstChild("EliteHighlight") then
+                        local hl = Instance.new("Highlight", obj)
+                        hl.Name = "EliteHighlight"
+                        hl.OutlineColor = foundData.Color
+                        hl.FillTransparency = 0.7
+                    end
 
-                -- Auto-Buy Teleport
-                if AutoBuyActive and SelectedForAutoBuy[obj.Name] then
-                    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
-                    task.wait(3) -- Sicherheits-Pause
+                    -- 2. Radar Button (Manuell)
+                    if not TrackedObjects[obj] then
+                        RadarTab:CreateButton({
+                           Name = "ZU: " .. obj.Name,
+                           Callback = function() 
+                               game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
+                           end,
+                        })
+                        TrackedObjects[obj] = true
+                    end
+
+                    -- 3. Auto-Buy Teleport (Nur falls ausgewählt)
+                    for dbName, selected in pairs(SelectedForAutoBuy) do
+                        if selected and string.find(obj.Name, dbName) and AutoBuyActive then
+                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = obj:GetModelCFrame() + Vector3.new(0,5,0)
+                            task.wait(2)
+                        end
+                    end
                 end
             end
         end
